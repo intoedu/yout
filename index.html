@@ -163,6 +163,41 @@ body {
 .hint { color: var(--muted); font-size: 13px; text-align: center; line-height: 1.6; }
 kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-width: 3px; border-radius: 6px; padding: 0 7px; color: var(--fg); }
 
+/* 위쪽 줄: 왼쪽 순위, 가운데 차례 */
+.topbar { width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.rank { position: relative; justify-self: start; }
+.rank-btn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  background: rgba(0,0,0,.28); color: var(--fg); border: 1px solid rgba(255,255,255,.2);
+  border-radius: 12px; padding: 8px 12px; cursor: pointer; font-family: var(--body); font-size: 12px; text-align: left;
+}
+.rank-btn b { font-family: var(--display); font-size: 15px; font-weight: normal; }
+.rank-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.rank-panel {
+  position: absolute; left: 0; top: calc(100% + 8px); z-index: 20;
+  width: min(280px, calc(100vw - 32px));
+  background: #16211b; border: 1px solid rgba(255,255,255,.18); border-radius: 14px;
+  padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.45); text-shadow: none;
+}
+.rank-panel[hidden] { display: none; }
+.rank-panel h3 { margin: 0; font-family: var(--display); font-weight: normal; font-size: 17px; }
+.rank-list { display: flex; flex-direction: column; gap: 6px; }
+.rank-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.06); }
+.rank-row .no { font-family: var(--display); font-size: 16px; width: 2.6em; color: var(--gold); }
+.rank-row .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--tc); flex: none; }
+.rank-row .nm { flex: 1; min-width: 0; font-family: var(--display); font-size: 15px; }
+.rank-row button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; }
+.rank-ask { font-size: 13px; color: var(--muted); }
+.rank-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.rank-pick button {
+  font-family: var(--display); font-size: 15px; color: #10251a; background: var(--tc);
+  border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+}
+.rank-foot { display: flex; justify-content: space-between; gap: 8px; }
+.team .rank-badge { font-family: var(--display); font-size: 13px; color: #2a2208; background: var(--gold); padding: 3px 10px; border-radius: 999px; flex: none; }
+.team.done { opacity: .75; }
+
 /* 차례 표시 */
 .turn {
   display: flex; align-items: center; gap: 10px;
@@ -234,7 +269,14 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
 <body>
 
 <div class="wrap">
-  <div class="turn" id="turn"><span class="dot"></span><span class="name"></span><span>차례</span></div>
+  <div class="topbar">
+    <div class="rank">
+      <button type="button" class="rank-btn" id="rankBtn" aria-expanded="false"><span>순위</span><b id="rankSum">정하기</b></button>
+      <div class="rank-panel" id="rankPanel" hidden></div>
+    </div>
+    <div class="turn" id="turn"><span class="dot"></span><span class="name"></span><span>차례</span></div>
+    <span></span>
+  </div>
   <div class="result" aria-live="polite">
     <div class="pill wait" id="pill">준비</div>
     <div class="sub" id="sub">스페이스바를 꾹 눌렀다가 떼면 던집니다</div>
@@ -420,6 +462,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
 
   function startCharge() {
     if (charging || busy) return;
+    if (gameOver()) { pill.className = 'pill pop big'; pill.textContent = '게임 끝'; sub.textContent = '새 게임을 누르거나 순위를 취소하면 다시 던질 수 있습니다'; return; }
     charging = true; startT = performance.now();
     btn.classList.add('pressed');
     if (onMat) { sticks.forEach(s => s.classList.add('hidden')); onMat = false; }
@@ -584,9 +627,66 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     lastThrower = thrower;
     if (bonus) { turnPassed = false; }                       // 윷·모: 한 번 더
     else if (extra > 0) { extra--; turnPassed = false; }     // 잡기로 얻은 추가 던지기 사용
-    else { turn = (thrower + 1) % teams.length; turnPassed = true; }
+    else { const n = nextTeam(thrower); if (n >= 0) turn = n; turnPassed = true; }
     renderTeams();
   }
+
+  // ── 순위 ──
+  let ranks = [];   // 들어온 순서대로 팀 (1등부터)
+  const rankBtn = document.getElementById('rankBtn');
+  const rankPanel = document.getElementById('rankPanel');
+  const rankSum = document.getElementById('rankSum');
+  const isDone = t => ranks.includes(t);
+  const gameOver = () => teams.length > 0 && teams.every(isDone);
+  function nextTeam(from) {           // from 다음으로 아직 순위가 없는 팀
+    for (let k = 1; k <= teams.length; k++) {
+      const i = (from + k) % teams.length;
+      if (!isDone(teams[i])) return i;
+    }
+    return -1;
+  }
+  function fixTurn() {                // 지금 차례 팀이 순위에 들었으면 다음 팀으로
+    if (isDone(teams[turn])) { const n = nextTeam(turn); if (n >= 0) { turn = n; turnPassed = true; extra = 0; } }
+  }
+  function renderRank() {
+    rankSum.textContent = ranks.length ? `1등 ${ranks[0].name}` + (ranks.length > 1 ? ` 외 ${ranks.length - 1}` : '') : '정하기';
+    const left = teams.filter(t => !isDone(t));
+    const rows = ranks.map((t, i) => `<div class="rank-row" style="--tc:${t.color}">
+        <span class="no">${i + 1}등</span><span class="dot"></span><span class="nm">${esc(t.name)}</span>
+        <button type="button" data-unrank="${i}" aria-label="${i + 1}등부터 취소">×</button></div>`).join('');
+    const ask = left.length
+      ? `<div class="rank-ask">${ranks.length + 1}등은 어느 팀인가요?</div>
+         <div class="rank-pick">${left.map(t => `<button type="button" data-rank="${teams.indexOf(t)}" style="--tc:${t.color}">${esc(t.name)}</button>`).join('')}</div>`
+      : `<div class="rank-ask">모든 순위가 정해졌습니다</div>`;
+    rankPanel.innerHTML = `<h3>순위 정하기</h3>${rows ? `<div class="rank-list">${rows}</div>` : ''}${ask}
+      <div class="rank-foot"><button type="button" class="tbtn" id="rankReset">순위 초기화</button><button type="button" class="tbtn" id="rankClose">닫기</button></div>`;
+  }
+  function openRank(open) {
+    rankPanel.hidden = !open; rankBtn.setAttribute('aria-expanded', open);
+    if (open) renderRank();
+  }
+  rankBtn.addEventListener('click', () => openRank(rankPanel.hidden));
+  rankPanel.addEventListener('click', e => {
+    const pick = e.target.closest('[data-rank]');
+    const un = e.target.closest('[data-unrank]');
+    if (pick) {
+      ranks.push(teams[+pick.dataset.rank]);
+      const left = teams.filter(t => !isDone(t));
+      if (left.length === 1) ranks.push(left[0]);         // 마지막 한 팀은 자동으로 꼴등
+      fixTurn();
+      if (gameOver()) { pill.className = 'pill pop big'; pill.textContent = '게임 끝'; sub.innerHTML = ranks.map((t, i) => `${i + 1}등 <b style="color:${t.color}">${esc(t.name)}</b>`).join(' · '); sfx.result('윷'); }
+    } else if (un) {
+      ranks = ranks.slice(0, +un.dataset.unrank);        // 그 등수부터 뒤는 다시 정함
+    } else if (e.target.id === 'rankReset') {
+      ranks = [];
+    } else if (e.target.id === 'rankClose') {
+      openRank(false); return;
+    } else return;
+    renderTeams(); renderRank();
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!rankPanel.hidden && !e.target.closest('.rank')) openRank(false);
+  });
 
   // 잡았다 → 직전에 던진 팀이 한 번 더
   catchBtn.addEventListener('click', () => {
@@ -604,6 +704,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   function cls(r) { return r === '빽도' ? ' back' : (r === '윷' || r === '모') ? ' big' : r === '낙' ? ' nak' : r === '잡기' ? ' catch-chip' : ''; }
   function renderTeams() {
     const cur = teams[turn];
+    rankSum.textContent = ranks.length ? `1등 ${ranks[0].name}` + (ranks.length > 1 ? ` 외 ${ranks.length - 1}` : '') : '정하기';
     turnEl.style.setProperty('--tc', cur.color);
     document.body.style.setProperty('--team-bg', shade(cur.color, 0.72));
     const owed = (lastThrower === turn && !turnPassed && teams[turn].log.length) ? '<span class="bonus">한 번 더</span>' : '';
@@ -621,11 +722,12 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
       const stats = shots.length
         ? `<span>${shots.length}번 던짐</span>` + NAMES.filter(n => cnt(n)).map(n => `<span>${n} ${cnt(n)}</span>`).join('') + (t.log.length - shots.length ? `<span>잡기 ${t.log.length - shots.length}</span>` : '')
         : '';
-      return `<div class="team${i === turn ? ' now' : ''}" style="--tc:${t.color}">
+      return `<div class="team${i === turn && !isDone(t) ? ' now' : ''}${isDone(t) ? ' done' : ''}" style="--tc:${t.color}">
         <div class="team-top">
           <span class="dot"></span>
           <input id="team-name-${i}" data-i="${i}" value="${esc(t.name)}" maxlength="12" aria-label="팀 이름">
-          ${i === turn ? '<span class="badge">차례</span>' : ''}
+          ${isDone(t) ? `<span class="rank-badge">${ranks.indexOf(t) + 1}등</span>` : ''}
+          ${i === turn && !isDone(t) ? '<span class="badge">차례</span>' : ''}
           ${teams.length > 2 ? `<button type="button" class="del" data-del="${i}" aria-label="${esc(t.name)} 삭제">×</button>` : ''}
         </div>
         <div class="chips">${chips}</div>
@@ -645,10 +747,11 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   teamList.addEventListener('click', e => {
     const d = e.target.closest('[data-del]'); if (!d || busy || charging) return;
     const i = +d.dataset.del;
+    ranks = ranks.filter(t => t !== teams[i]);
     teams.splice(i, 1);
     if (turn > i || turn >= teams.length) turn = (turn > i ? turn - 1 : 0);
     if (lastThrower !== null) lastThrower = lastThrower === i ? null : (lastThrower > i ? lastThrower - 1 : lastThrower);
-    extra = 0; renderTeams();
+    extra = 0; fixTurn(); renderTeams();
   });
   document.getElementById('addTeam').addEventListener('click', () => {
     if (teams.length >= MAX_TEAMS) return;
@@ -657,7 +760,8 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   document.getElementById('newGame').addEventListener('click', () => {
     if (busy || charging) return;
     teams.forEach(t => t.log = []);
-    turn = 0; lastThrower = null; turnPassed = false; extra = 0;
+    turn = 0; lastThrower = null; turnPassed = false; extra = 0; ranks = [];
+    if (!rankPanel.hidden) renderRank();
     pill.className = 'pill wait'; pill.textContent = '준비';
     sub.textContent = '스페이스바를 꾹 눌렀다가 떼면 던집니다';
     renderTeams();
