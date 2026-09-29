@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>윷 던지기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gowun+Dodum&display=swap">
+<style>
+/* 레이아웃: 초록 담요 한 화면 — 위 결과 표시, 가운데 타원 멍석(윷이 떨어지는 곳), 아래 세기 게이지·던지기 버튼, 맨 아래 기록 */
+:root {
+  --blanket: #1f4a33;     /* 윷 담요 */
+  --blanket-deep: #143424;
+  --mat: #2c6a47;         /* 멍석 안쪽 */
+  --mat-edge: #3b7f58;
+  --wood-flat: #ecd3a2;   /* 배(평평한 면) */
+  --wood-back: #8a5a31;   /* 등(둥근 면) */
+  --ink: #2b1a0c;
+  --fg: #f4eedf;
+  --muted: #a9c4b3;
+  --hot: #d9453b;         /* 빽도·위험 구간 */
+  --gold: #f2c84b;        /* 게이지·윷·모 */
+  --nak: #6e7d74;         /* 낙 */
+  --display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: radial-gradient(ellipse at 50% 35%, var(--blanket) 0%, var(--blanket-deep) 80%);
+  background-color: var(--blanket-deep);
+  color: var(--fg);
+  font-family: var(--body);
+  padding-inline: 16px;
+  display: flex; justify-content: center;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  overflow-x: hidden;
+}
+.wrap {
+  width: 100%; max-width: 620px;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding-block: 20px 28px;
+}
+
+/* 결과 */
+.result { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 104px; justify-content: center; }
+.pill {
+  font-family: var(--display); font-size: clamp(34px, 10vw, 52px); line-height: 1;
+  padding: 12px 30px; border-radius: 14px;
+  background: #2f5c43; color: var(--fg);
+  box-shadow: 0 6px 16px rgba(0,0,0,.3);
+}
+.pill.pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1); }
+.pill.back { background: var(--hot); color: #fff; }
+.pill.big  { background: var(--gold); color: #2a2208; }
+.pill.nak  { background: var(--nak); color: #eef2ef; }
+.pill.wait { background: transparent; box-shadow: none; color: var(--muted); font-size: 28px; }
+.sub { font-size: 16px; color: var(--muted); min-height: 1.4em; text-align: center; }
+.again {
+  font-family: var(--display); font-size: 15px; color: #2a2208; background: var(--gold);
+  padding: 3px 12px; border-radius: 999px; margin-left: 6px;
+}
+@keyframes pop { 0% { transform: scale(.4); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
+
+/* 멍석과 윷가락 */
+.field { position: relative; width: 100%; aspect-ratio: 1.35; max-width: 100%; }
+.mat {
+  position: absolute; left: 10%; top: 12%; width: 80%; height: 76%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 45%, var(--mat-edge), var(--mat) 70%);
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.25);
+}
+.stick {
+  position: absolute; left: 35%; top: 84.25%;
+  width: 30%; height: 7.5%;
+  border-radius: 999px;
+  box-shadow: 0 6px 10px rgba(0,0,0,.4);
+  will-change: transform;
+}
+.stick.flat { background: linear-gradient(180deg, #d6b47b, var(--wood-flat) 40%, #f6e2bb 60%, #d6b47b); }
+.stick.back { background: linear-gradient(180deg, #6a4121, var(--wood-back) 35%, #ac7a48 55%, #6f4523); }
+.stick .x { display: none; position: absolute; top: 50%; transform: translateY(-50%); color: var(--ink); font-weight: bold; font-size: clamp(11px, 3vw, 16px); opacity: .8; }
+.stick .x.l { left: 22%; } .stick .x.r { right: 22%; }
+.stick.back .x { display: block; }
+.stick .seal {
+  display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: clamp(18px, 5vw, 26px); height: clamp(18px, 5vw, 26px); border-radius: 50%;
+  border: 2px solid var(--hot); color: var(--hot);
+  font-family: var(--display); font-size: clamp(10px, 2.6vw, 13px);
+  place-items: center;
+}
+.stick.marked.flat .seal { display: grid; }
+.stick.out { filter: grayscale(.6) brightness(.75); }
+
+/* 세기 게이지 */
+.power { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 6px; }
+.gauge {
+  position: relative; height: 18px; border-radius: 999px; overflow: hidden;
+  background: rgba(0,0,0,.28);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.4);
+}
+.gauge .danger {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 18%;
+  background: repeating-linear-gradient(135deg, rgba(217,69,59,.45) 0 6px, rgba(217,69,59,.25) 6px 12px);
+}
+.gauge .fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+  background: var(--gold); border-radius: 999px;
+}
+.gauge .fill.hot { background: var(--hot); }
+.power-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.throw {
+  width: 108px; height: 108px; border-radius: 50%;
+  font-family: var(--display); font-size: 22px; color: var(--fg);
+  background: radial-gradient(circle at 50% 35%, #3f9466, #2a7250);
+  border: 3px solid rgba(255,255,255,.15);
+  box-shadow: 0 6px 0 #184530, 0 10px 20px rgba(0,0,0,.35);
+  cursor: pointer; touch-action: none;
+  transition: transform .08s, box-shadow .08s;
+}
+.throw.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #184530, 0 4px 10px rgba(0,0,0,.35); }
+.throw:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
+.hint { color: var(--muted); font-size: 13px; text-align: center; line-height: 1.6; }
+kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-width: 3px; border-radius: 6px; padding: 0 7px; color: var(--fg); }
+
+/* 기록 */
+.log { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.log-head { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted); font-size: 13px; }
+.log-head button { background: none; border: 1px solid #3d6b52; color: var(--muted); border-radius: 8px; padding: 4px 10px; font-family: var(--body); cursor: pointer; }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; min-height: 32px; }
+.chip { font-family: var(--display); font-size: 15px; padding: 5px 11px; border-radius: 8px; background: #2f5c43; color: var(--fg); }
+.chip.back { background: rgba(217,69,59,.25); color: #ff8a80; }
+.chip.big  { background: rgba(242,200,75,.2); color: var(--gold); }
+.chip.nak  { background: rgba(110,125,116,.35); color: #c9d3cd; }
+.chip.latest { outline: 2px solid var(--fg); }
+.empty { color: var(--muted); font-size: 13px; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) { .pill.pop { animation: none; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="result" aria-live="polite">
+    <div class="pill wait" id="pill">준비</div>
+    <div class="sub" id="sub">스페이스바를 꾹 눌렀다가 떼면 던집니다</div>
+  </div>
+
+  <div class="field" id="field">
+    <div class="mat"></div>
+  </div>
+
+  <div class="power">
+    <div class="gauge" aria-hidden="true">
+      <div class="danger"></div>
+      <div class="fill" id="fill"></div>
+    </div>
+    <div class="power-label"><span>약하게</span><span id="pct">세기 0%</span><span>너무 세면 낙!</span></div>
+  </div>
+
+  <button class="throw" id="throw" type="button">던지기</button>
+  <div class="hint"><kbd>Space</kbd> 길게 눌러 세기 조절 → 손을 떼면 던집니다<br>게이지는 끝까지 차면 다시 내려옵니다 · 처음에 화면을 한 번 클릭해 주세요</div>
+
+  <div class="log">
+    <div class="log-head">
+      <span>던진 기록 (최근 30회)</span>
+      <button type="button" id="clear">기록 지우기</button>
+    </div>
+    <div class="chips" id="chips"><span class="empty">아직 던진 기록이 없습니다</span></div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const field = document.getElementById('field');
+  const pill = document.getElementById('pill');
+  const sub = document.getElementById('sub');
+  const btn = document.getElementById('throw');
+  const fill = document.getElementById('fill');
+  const pct = document.getElementById('pct');
+  const chipsEl = document.getElementById('chips');
+  const statsEl = document.getElementById('stats');
+
+  const MARKED = 3;              // 빽도 도장이 찍힌 윷가락
+  const DANGER = 0.82;           // 이 세기부터 낙 위험 구간
+  const NAMES = ['빽도','도','개','걸','윷','모','낙'];
+  const STEPS = { '빽도':'뒤로 1칸','도':'1칸','개':'2칸','걸':'3칸','윷':'4칸','모':'5칸','낙':'멍석 밖으로 나갔습니다 · 이번 차례는 무효' };
+
+  // 윷가락 4개 만들기
+  const sticks = [0,1,2,3].map(i => {
+    const s = document.createElement('div');
+    s.className = 'stick ' + (i % 2 ? 'back' : 'flat') + (i === MARKED ? ' marked' : '');
+    s.innerHTML = '<span class="x l">✕</span><span class="seal">빽</span><span class="x r">✕</span>';
+    field.appendChild(s);
+    return s;
+  });
+  // 처음 배치: 멍석 가운데에 흩어 두기
+  // 멍석 중심 기준 필드 % 좌표 → 막대 기준 translate %
+  const toStick = (fx, fy) => ({ x: fx / 30 * 100, y: (fy - 38) / 7.5 * 100 });
+  const initial = [[-12,-12,-12],[10,-14,20],[-8,8,8],[13,12,-24]];
+  sticks.forEach((s, i) => { const t = toStick(initial[i][0], initial[i][1]); place(s, t.x, t.y, initial[i][2]); });
+
+  function place(s, dx, dy, rot) {
+    s.style.transform = `translate(${dx}%, ${dy}%) rotate(${rot}deg)`;
+  }
+  const rnd = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+
+  // ── 세기 게이지 ──
+  let charging = false, busy = false, startT = 0, power = 0, raf = 0;
+  const CYCLE = 1100; // 0→100% 걸리는 시간(ms)
+
+  function startCharge() {
+    if (charging || busy) return;
+    charging = true; startT = performance.now();
+    btn.classList.add('pressed');
+    pill.className = 'pill wait'; pill.textContent = '세기 모으는 중';
+    sub.textContent = '원하는 세기에서 손을 떼세요';
+    tick();
+  }
+  function tick() {
+    const t = ((performance.now() - startT) % (CYCLE * 2)) / CYCLE; // 0~2
+    power = t <= 1 ? t : 2 - t;                                        // 올라갔다 내려옴
+    fill.style.width = (power * 100).toFixed(1) + '%';
+    fill.classList.toggle('hot', power >= DANGER);
+    pct.textContent = '세기 ' + Math.round(power * 100) + '%';
+    raf = requestAnimationFrame(tick);
+  }
+  function release() {
+    if (!charging) return;
+    charging = false; cancelAnimationFrame(raf);
+    btn.classList.remove('pressed');
+    throwYut(Math.max(power, 0.08));
+  }
+
+  // ── 던지기 판정 ──
+  // 각 윷가락: 배/등 50%. 세기가 위험 구간을 넘으면 멍석 밖으로 나갈(낙) 확률이 급격히 오름.
+  function nakChance(p) {
+    const base = 0.008;
+    if (p < DANGER) return base;
+    const k = (p - DANGER) / (1 - DANGER);
+    return base + 0.4 * k * k;
+  }
+
+  function throwYut(p) {
+    busy = true;
+    const flats = sticks.map(() => rnd() < 0.5);
+    const outs = sticks.map(() => rnd() < nakChance(p));
+    const nak = outs.some(Boolean);
+    let result;
+    if (nak) result = '낙';
+    else {
+      const n = flats.filter(Boolean).length;
+      result = n === 0 ? '모' : n === 1 ? (flats[MARKED] ? '빽도' : '도') : n === 2 ? '개' : n === 3 ? '걸' : '윷';
+    }
+
+    // 떨어질 위치: 세기가 셀수록 넓게 흩어짐. 멍석(타원) 반지름 기준 %.
+    const spread = 0.25 + 0.6 * Math.min(p, 1);
+    const spots = [];
+    sticks.forEach((s, i) => {
+      let best = null;
+      for (let tries = 0; tries < 30; tries++) {
+        const a = rnd() * Math.PI * 2;
+        const r = outs[i] ? 1.12 + rnd() * 0.12 : Math.sqrt(rnd()) * spread;
+        // 필드 좌표(% of 막대 크기): 멍석 반지름 가로 40%·세로 38%를 막대 크기 기준으로 환산
+        const { x, y } = toStick(Math.cos(a) * r * 40, Math.sin(a) * r * 38);
+        const cand = { x, y, rot: rnd() * 180 - 90 };
+        const ok = spots.every(o => Math.hypot((o.x - x) * 0.3, (o.y - y) * 0.075) > 9);
+        best = cand; if (ok) break;
+      }
+      spots.push(best);
+    });
+
+    const dur = 650 + p * 550;
+    const lift = 18 + p * 42;       // 공중에 뜨는 높이(필드 % 기준)
+    pill.className = 'pill wait'; pill.textContent = '…'; sub.textContent = '';
+
+    sticks.forEach((s, i) => {
+      const sp = spots[i];
+      const spin = (rnd() < 0.5 ? -1 : 1) * (360 + p * 900 * rnd());
+      const midY = sp.y / 2 - lift / 7.5 * 100;
+      const kf = [
+        { transform: `translate(${(rnd()-0.5)*40}%, 0%) rotate(${rnd()*20-10}deg) scale(1)` },
+        { transform: `translate(${sp.x/2}%, ${midY}%) rotate(${spin/2}deg) scale(${1.15 + p*0.35})`, offset: 0.5 },
+        { transform: `translate(${sp.x}%, ${sp.y}%) rotate(${sp.rot + spin}deg) scale(1)`, offset: 0.9 },
+        { transform: `translate(${sp.x}%, ${sp.y}%) rotate(${sp.rot}deg) scale(1)` }
+      ];
+      s.classList.remove('out');
+      const anim = s.animate(kf, { duration: dur, easing: 'cubic-bezier(.25,.6,.35,1)', fill: 'forwards' });
+      setTimeout(() => {
+        s.classList.toggle('flat', flats[i]);
+        s.classList.toggle('back', !flats[i]);
+      }, dur * 0.45);
+      anim.onfinish = () => {
+        place(s, sp.x, sp.y, sp.rot);
+        anim.cancel();
+        if (outs[i]) s.classList.add('out');
+      };
+    });
+
+    setTimeout(() => {
+      pill.textContent = result;
+      pill.className = 'pill pop' + (result === '빽도' ? ' back' : '') + (result === '윷' || result === '모' ? ' big' : '') + (result === '낙' ? ' nak' : '');
+      sub.innerHTML = STEPS[result] + ((result === '윷' || result === '모') ? '<span class="again">한 번 더!</span>' : '');
+      record(result);
+      fill.style.width = '0%'; fill.classList.remove('hot'); pct.textContent = '세기 ' + Math.round(p * 100) + '% 로 던짐';
+      busy = false;
+    }, dur + 30);
+  }
+
+  // ── 기록 ──
+  let history = [];
+  let counts = Object.fromEntries(NAMES.map(n => [n, 0]));
+  function record(r) {
+    history.unshift(r); if (history.length > 30) history.pop();
+    counts[r]++; render();
+  }
+  function cls(r) { return r === '빽도' ? ' back' : (r === '윷' || r === '모') ? ' big' : r === '낙' ? ' nak' : ''; }
+  function render() {
+    if (!history.length) {
+      chipsEl.innerHTML = '<span class="empty">아직 던진 기록이 없습니다</span>'; statsEl.textContent = ''; return;
+    }
+    chipsEl.innerHTML = history.map((r, i) => `<span class="chip${cls(r)}${i === 0 ? ' latest' : ''}">${r}</span>`).join('');
+    const total = NAMES.reduce((a, n) => a + counts[n], 0);
+    statsEl.innerHTML = `<span>총 ${total}회</span>` + NAMES.map(n => `<span>${n} ${counts[n]}</span>`).join('');
+  }
+  document.getElementById('clear').addEventListener('click', () => {
+    history = []; counts = Object.fromEntries(NAMES.map(n => [n, 0])); render();
+  });
+
+  // ── 입력: 스페이스바 / 버튼 길게 누르기 ──
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space' && e.key !== ' ') return;
+    e.preventDefault();
+    if (!e.repeat) startCharge();
+  });
+  document.addEventListener('keyup', e => {
+    if (e.code !== 'Space' && e.key !== ' ') return;
+    e.preventDefault(); release();
+  });
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); startCharge(); });
+  btn.addEventListener('pointerup', release);
+  btn.addEventListener('pointercancel', release);
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+  window.addEventListener('blur', release);
+})();
+</script>
+</body>
+</html>
