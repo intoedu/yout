@@ -17,7 +17,7 @@
   --wood-back: #8a5a31;   /* 등(둥근 면) */
   --ink: #2b1a0c;
   --fg: #f4eedf;
-  --muted: #a9c4b3;
+  --muted: rgba(255,255,255,.8);
   --hot: #d9453b;         /* 빽도·위험 구간 */
   --gold: #f2c84b;        /* 게이지·윷·모 */
   --nak: #6e7d74;         /* 낙 */
@@ -28,7 +28,7 @@
 html, body { height: 100%; }
 body {
   --team-bg: var(--blanket-deep);
-  background-image: radial-gradient(ellipse at 50% 35%, rgba(255,255,255,.08) 0%, rgba(0,0,0,.45) 85%);
+  background-image: radial-gradient(ellipse at 50% 35%, rgba(255,255,255,.14) 0%, rgba(0,0,0,.28) 90%);
   background-color: var(--team-bg);
   background-attachment: fixed;
   transition: background-color .6s ease;
@@ -41,6 +41,7 @@ body {
   overflow-x: hidden;
 }
 .wrap {
+  text-shadow: 0 1px 3px rgba(0,0,0,.35);
   width: 100%; max-width: 620px;
   display: flex; flex-direction: column; align-items: center; gap: 16px;
   padding-block: 20px 28px;
@@ -175,6 +176,14 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
 
 /* 던지기 + 잡기 버튼 줄 */
 .actions { width: 100%; max-width: 420px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.sound {
+  justify-self: end;
+  font-family: var(--body); font-size: 13px; color: var(--fg);
+  background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.2);
+  border-radius: 999px; padding: 8px 12px; cursor: pointer;
+}
+.sound[aria-pressed="false"] { opacity: .6; }
+.sound:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 .catch {
   justify-self: start;
   font-family: var(--display); font-size: 16px; line-height: 1.25; color: #2a2208;
@@ -245,7 +254,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   </div>
 
   <div class="actions">
-    <span></span>
+    <button class="sound" id="sound" type="button" aria-pressed="true">소리 켜짐</button>
     <button class="throw" id="throw" type="button">던지기</button>
     <button class="catch" id="catch" type="button" disabled>잡았다!<small>한 번 더</small></button>
   </div>
@@ -333,9 +342,78 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   function place(s, dx, dy, rot) {
     s.style.transform = `translate(${dx}%, ${dy}%) rotate(${rot}deg)`;
   }
+  // ── 소리 ──
+  const AC = window.AudioContext || window.webkitAudioContext;
+  let ac = null, soundOn = true, hum = null;
+  const soundBtn = document.getElementById('sound');
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.setAttribute('aria-pressed', soundOn);
+    soundBtn.textContent = soundOn ? '소리 켜짐' : '소리 꺼짐';
+    if (!soundOn) stopHum();
+  });
+  function audio() {
+    if (!soundOn || !AC) return null;
+    try { if (!ac) ac = new AC(); if (ac.state === 'suspended') ac.resume(); } catch (e) { return null; }
+    return ac;
+  }
+  function tone(f, t, d, type = 'sine', v = 0.2, f2) {
+    const a = audio(); if (!a) return;
+    const o = a.createOscillator(), g = a.createGain(), t0 = a.currentTime + t;
+    o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + d);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(v, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + d + 0.02);
+  }
+  function noise(t, d, v, f1, f2, q = 1) {
+    const a = audio(); if (!a) return;
+    const n = Math.floor(a.sampleRate * d), buf = a.createBuffer(1, n, a.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) ch[i] = Math.random() * 2 - 1;
+    const src = a.createBufferSource(), bp = a.createBiquadFilter(), g = a.createGain(), t0 = a.currentTime + t;
+    src.buffer = buf; bp.type = 'bandpass'; bp.Q.value = q;
+    bp.frequency.setValueAtTime(f1, t0); bp.frequency.exponentialRampToValueAtTime(f2, t0 + d);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(v, t0 + d * 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    src.connect(bp).connect(g).connect(a.destination); src.start(t0); src.stop(t0 + d);
+  }
+  function knock(t) {               // 나무 윷가락이 멍석에 부딪히는 '딱'
+    const f = 700 + Math.random() * 500;
+    tone(f, t, 0.07, 'triangle', 0.35, f * 0.6);
+    noise(t, 0.04, 0.25, 2500, 1500, 2);
+  }
+  function startHum() {             // 세기 모을 때 올라갔다 내려가는 소리
+    const a = audio(); if (!a) return;
+    stopHum();
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = 'triangle'; o.frequency.value = 180;
+    g.gain.value = 0.0001; g.gain.exponentialRampToValueAtTime(0.06, a.currentTime + 0.05);
+    o.connect(g).connect(a.destination); o.start();
+    hum = { o, g };
+  }
+  function setHum(p) { if (hum && ac) hum.o.frequency.setTargetAtTime(180 + p * 520, ac.currentTime, 0.01); }
+  function stopHum() {
+    if (!hum || !ac) { hum = null; return; }
+    const { o, g } = hum; hum = null;
+    g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.02); o.stop(ac.currentTime + 0.15);
+  }
+  const sfx = {
+    whoosh: p => noise(0, 0.35 + p * 0.2, 0.25 + p * 0.2, 400, 2500 + p * 2000, 0.8),
+    land: (delay) => { for (let i = 0; i < 4; i++) knock(delay + i * 0.035 + Math.random() * 0.05); },
+    tick: () => tone(1200, 0, 0.05, 'square', 0.06),
+    result: r => {
+      if (r === '윷' || r === '모') [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.28, 'triangle', 0.22));
+      else if (r === '낙') { tone(220, 0, 0.45, 'sawtooth', 0.12, 90); }
+      else if (r === '빽도') tone(600, 0, 0.35, 'sine', 0.22, 180);
+      else { const f = { '도': 440, '개': 494, '걸': 554 }[r] || 440; tone(f, 0, 0.16, 'triangle', 0.18); tone(f * 1.5, 0.08, 0.2, 'triangle', 0.14); }
+    },
+    catch: () => { [659, 784, 988, 1319].forEach((f, i) => tone(f, i * 0.06, 0.22, 'square', 0.08)); noise(0, 0.25, 0.2, 3000, 6000, 0.7); }
+  };
+
   const rnd = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
 
   // ── 세기 게이지 ──
+  let lastSec = 3;
   let charging = false, busy = false, startT = 0, power = 0, raf = 0;
   const CYCLE = 250;  // 0→100% 걸리는 시간(ms)
   const LIMIT = 3000; // 누르고 있을 수 있는 최대 시간(ms). 넘으면 그 세기로 자동으로 던짐
@@ -347,6 +425,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     if (onMat) { sticks.forEach(s => s.classList.add('hidden')); onMat = false; }
     hand.getAnimations().forEach(a => a.cancel());
     hand.classList.remove('empty'); hand.classList.add('show');
+    startHum(); lastSec = 3;
     pill.className = 'pill wait'; pill.textContent = teams[turn].name + ' 던지는 중';
     sub.textContent = '3초 안에 원하는 세기에서 손을 떼세요';
     tick();
@@ -361,6 +440,9 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     timerEl.hidden = false;
     timerEl.innerHTML = '<span>' + (left / 1000).toFixed(1) + '<small>초</small></span>';
     timerEl.classList.toggle('warn', left < 1000);
+    setHum(power);
+    const sec = Math.ceil(left / 1000);
+    if (sec < lastSec) { lastSec = sec; if (sec > 0) sfx.tick(); }
     if (left <= 0) { sub.textContent = '3초가 지나 자동으로 던졌습니다'; release(); return; }
     const shake = power >= DANGER ? (Math.random() - 0.5) * 6 : 0;
     hand.style.transform = `translateX(-50%) translateY(${power * 14}%) rotate(${power * 28 + shake}deg)`;
@@ -370,6 +452,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     if (!charging) return;
     charging = false; cancelAnimationFrame(raf);
     timerEl.hidden = true;
+    stopHum();
     btn.classList.remove('pressed');
     const p = Math.max(power, 0.08);
     busy = true;
@@ -379,7 +462,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
       { transform: `translateX(-50%) translateY(-${10 + p * 18}%) rotate(-${20 + p * 25}deg)`, offset: 0.45 },
       { transform: `translateX(-50%) translateY(0%) rotate(-8deg)` }
     ], { duration: 320, easing: 'cubic-bezier(.3,.8,.3,1)', fill: 'forwards' });
-    setTimeout(() => { hand.classList.add('empty'); throwYut(p); }, 130);
+    setTimeout(() => { hand.classList.add('empty'); sfx.whoosh(p); throwYut(p); }, 130);
     swing.onfinish = () => { hand.classList.remove('show'); hand.style.transform = 'translateX(-50%)'; setTimeout(() => swing.cancel(), 200); };
   }
 
@@ -432,6 +515,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     const dur = 650 + p * 550;
     const lift = 18 + p * 42;       // 공중에 뜨는 높이(필드 % 기준)
     pill.className = 'pill wait'; pill.textContent = '…'; sub.textContent = '';
+    sfx.land(dur * 0.88 / 1000);
 
     sticks.forEach((s, i) => {
       const sp = spots[i];
@@ -463,6 +547,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
       const bonus = result === '윷' || result === '모';
       sub.innerHTML = `<b style="color:${tm.color}">${esc(tm.name)}</b> · ` + STEPS[result] + (bonus ? '<span class="again">한 번 더!</span>' : '');
       tm.log.push(result); onMat = true;
+      sfx.result(result);
       afterThrow(thrower, bonus);
       fill.style.width = '0%'; fill.classList.remove('hot'); pct.textContent = '세기 ' + Math.round(p * 100) + '% 로 던짐';
       busy = false;
@@ -511,6 +596,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     if (turnPassed) { turn = lastThrower; turnPassed = false; }
     else extra++;
     pill.className = 'pill pop big'; pill.textContent = '잡았다!';
+    sfx.catch();
     sub.innerHTML = `<b style="color:${t.color}">${esc(t.name)}</b> 한 번 더 던집니다`;
     renderTeams();
   });
@@ -519,7 +605,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   function renderTeams() {
     const cur = teams[turn];
     turnEl.style.setProperty('--tc', cur.color);
-    document.body.style.setProperty('--team-bg', shade(cur.color, 0.42));
+    document.body.style.setProperty('--team-bg', shade(cur.color, 0.72));
     const owed = (lastThrower === turn && !turnPassed && teams[turn].log.length) ? '<span class="bonus">한 번 더</span>' : '';
     turnEl.innerHTML = `<span class="dot"></span><span class="name">${esc(cur.name)}</span><span>차례</span>${owed}`;
     catchBtn.disabled = lastThrower === null;
