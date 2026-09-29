@@ -92,6 +92,22 @@ body {
 }
 .stick.marked.flat .seal { display: grid; }
 .stick.out { filter: grayscale(.6) brightness(.75); }
+.stick { transition: opacity .15s; z-index: 2; }
+.stick.hidden { opacity: 0; }
+
+/* 윷을 쥔 손 */
+.hand {
+  position: absolute; left: 50%; bottom: -6%; width: 20%;
+  transform-origin: 50% 90%;
+  transform: translateX(-50%);
+  z-index: 3; opacity: 0; transition: opacity .18s;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 10px rgba(0,0,0,.35));
+}
+.hand.show { opacity: 1; }
+.hand svg { display: block; width: 100%; height: auto; }
+.hand .bundle { transition: opacity .05s; }
+.hand.empty .bundle { opacity: 0; }
 
 /* 세기 게이지 */
 .power { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 6px; }
@@ -162,7 +178,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   </div>
 
   <button class="throw" id="throw" type="button">던지기</button>
-  <div class="hint"><kbd>Space</kbd> 길게 눌러 세기 조절 → 손을 떼면 던집니다<br>게이지는 끝까지 차면 다시 내려옵니다 · 처음에 화면을 한 번 클릭해 주세요</div>
+  <div class="hint"><kbd>Space</kbd> 길게 눌러 세기 조절 → 손을 떼면 던집니다<br>게이지는 빠르게 오르내립니다 · 처음에 화면을 한 번 클릭해 주세요</div>
 
   <div class="log">
     <div class="log-head">
@@ -202,7 +218,30 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   // 멍석 중심 기준 필드 % 좌표 → 막대 기준 translate %
   const toStick = (fx, fy) => ({ x: fx / 30 * 100, y: (fy - 38) / 7.5 * 100 });
   const initial = [[-12,-12,-12],[10,-14,20],[-8,8,8],[13,12,-24]];
-  sticks.forEach((s, i) => { const t = toStick(initial[i][0], initial[i][1]); place(s, t.x, t.y, initial[i][2]); });
+  sticks.forEach((s, i) => { const t = toStick(initial[i][0], initial[i][1]); place(s, t.x, t.y, initial[i][2]); s.classList.add('hidden'); });
+
+  // 윷 네 가락을 쥔 손 (SVG)
+  const hand = document.createElement('div');
+  hand.className = 'hand show';
+  hand.innerHTML = `
+  <svg viewBox="0 0 120 170" aria-hidden="true">
+    <g class="bundle">
+      <rect x="28" y="4" width="15" height="120" rx="7.5" fill="#ecd3a2"/>
+      <rect x="44" y="0" width="15" height="120" rx="7.5" fill="#8a5a31"/>
+      <rect x="60" y="2" width="15" height="120" rx="7.5" fill="#ecd3a2"/>
+      <rect x="76" y="6" width="15" height="120" rx="7.5" fill="#8a5a31"/>
+      <text x="51.5" y="40" font-size="10" text-anchor="middle" fill="#2b1a0c">✕</text>
+      <text x="83.5" y="46" font-size="10" text-anchor="middle" fill="#2b1a0c">✕</text>
+    </g>
+    <rect x="30" y="140" width="62" height="30" fill="#e3b286"/>
+    <rect x="16" y="70" width="92" height="80" rx="26" fill="#f0c49a" stroke="#b07a50" stroke-width="2"/>
+    <path d="M22 92 Q62 84 104 92" fill="none" stroke="#c28a5e" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M22 110 Q62 102 104 110" fill="none" stroke="#c28a5e" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M22 128 Q62 120 104 128" fill="none" stroke="#c28a5e" stroke-width="2.5" stroke-linecap="round"/>
+    <ellipse cx="22" cy="100" rx="14" ry="26" transform="rotate(-18 22 100)" fill="#f5cda6" stroke="#b07a50" stroke-width="2"/>
+  </svg>`;
+  field.appendChild(hand);
+  let onMat = false;
 
   function place(s, dx, dy, rot) {
     s.style.transform = `translate(${dx}%, ${dy}%) rotate(${rot}deg)`;
@@ -211,12 +250,15 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
 
   // ── 세기 게이지 ──
   let charging = false, busy = false, startT = 0, power = 0, raf = 0;
-  const CYCLE = 700;  // 0→100% 걸리는 시간(ms)
+  const CYCLE = 450;  // 0→100% 걸리는 시간(ms)
 
   function startCharge() {
     if (charging || busy) return;
     charging = true; startT = performance.now();
     btn.classList.add('pressed');
+    if (onMat) { sticks.forEach(s => s.classList.add('hidden')); onMat = false; }
+    hand.getAnimations().forEach(a => a.cancel());
+    hand.classList.remove('empty'); hand.classList.add('show');
     pill.className = 'pill wait'; pill.textContent = '세기 모으는 중';
     sub.textContent = '원하는 세기에서 손을 떼세요';
     tick();
@@ -227,13 +269,24 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     fill.style.width = (power * 100).toFixed(1) + '%';
     fill.classList.toggle('hot', power >= DANGER);
     pct.textContent = '세기 ' + Math.round(power * 100) + '%';
+    const shake = power >= DANGER ? (Math.random() - 0.5) * 6 : 0;
+    hand.style.transform = `translateX(-50%) translateY(${power * 14}%) rotate(${power * 28 + shake}deg)`;
     raf = requestAnimationFrame(tick);
   }
   function release() {
     if (!charging) return;
     charging = false; cancelAnimationFrame(raf);
     btn.classList.remove('pressed');
-    throwYut(Math.max(power, 0.08));
+    const p = Math.max(power, 0.08);
+    busy = true;
+    const back = hand.style.transform;
+    const swing = hand.animate([
+      { transform: back },
+      { transform: `translateX(-50%) translateY(-${10 + p * 18}%) rotate(-${20 + p * 25}deg)`, offset: 0.45 },
+      { transform: `translateX(-50%) translateY(0%) rotate(-8deg)` }
+    ], { duration: 320, easing: 'cubic-bezier(.3,.8,.3,1)', fill: 'forwards' });
+    setTimeout(() => { hand.classList.add('empty'); throwYut(p); }, 130);
+    swing.onfinish = () => { hand.classList.remove('show'); hand.style.transform = 'translateX(-50%)'; setTimeout(() => swing.cancel(), 200); };
   }
 
   // ── 던지기 판정 ──
@@ -283,12 +336,12 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
       const spin = (rnd() < 0.5 ? -1 : 1) * (360 + p * 900 * rnd());
       const midY = sp.y / 2 - lift / 7.5 * 100;
       const kf = [
-        { transform: `translate(${(rnd()-0.5)*40}%, 0%) rotate(${rnd()*20-10}deg) scale(1)` },
+        { transform: `translate(${(rnd()-0.5)*20}%, -${80 + rnd()*40}%) rotate(${80 + rnd()*20}deg) scale(.75)` },
         { transform: `translate(${sp.x/2}%, ${midY}%) rotate(${spin/2}deg) scale(${1.15 + p*0.35})`, offset: 0.5 },
         { transform: `translate(${sp.x}%, ${sp.y}%) rotate(${sp.rot + spin}deg) scale(1)`, offset: 0.9 },
         { transform: `translate(${sp.x}%, ${sp.y}%) rotate(${sp.rot}deg) scale(1)` }
       ];
-      s.classList.remove('out');
+      s.classList.remove('out', 'hidden');
       const anim = s.animate(kf, { duration: dur, easing: 'cubic-bezier(.25,.6,.35,1)', fill: 'forwards' });
       setTimeout(() => {
         s.classList.toggle('flat', flats[i]);
@@ -305,7 +358,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
       pill.textContent = result;
       pill.className = 'pill pop' + (result === '빽도' ? ' back' : '') + (result === '윷' || result === '모' ? ' big' : '') + (result === '낙' ? ' nak' : '');
       sub.innerHTML = STEPS[result] + ((result === '윷' || result === '모') ? '<span class="again">한 번 더!</span>' : '');
-      record(result);
+      record(result); onMat = true;
       fill.style.width = '0%'; fill.classList.remove('hot'); pct.textContent = '세기 ' + Math.round(p * 100) + '% 로 던짐';
       busy = false;
     }, dur + 30);
