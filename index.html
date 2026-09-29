@@ -235,7 +235,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     <button class="throw" id="throw" type="button">던지기</button>
     <button class="catch" id="catch" type="button" disabled>잡았다!<small>한 번 더</small></button>
   </div>
-  <div class="hint"><kbd>Space</kbd> 길게 눌러 세기 조절 → 손을 떼면 던집니다<br>게이지 끝 빨간 구간에서 떼면 무조건 낙입니다 · 처음에 화면을 한 번 클릭해 주세요</div>
+  <div class="hint"><kbd>Space</kbd> 길게 눌러 세기 조절 → 손을 떼면 던집니다 · 3초가 지나면 자동으로 던집니다<br>게이지 끝 빨간 구간에서 떼면 무조건 낙입니다 · 처음에 화면을 한 번 클릭해 주세요</div>
 
   <div class="teams">
     <div class="teams-head">
@@ -323,6 +323,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   // ── 세기 게이지 ──
   let charging = false, busy = false, startT = 0, power = 0, raf = 0;
   const CYCLE = 250;  // 0→100% 걸리는 시간(ms)
+  const LIMIT = 3000; // 누르고 있을 수 있는 최대 시간(ms). 넘으면 그 세기로 자동으로 던짐
 
   function startCharge() {
     if (charging || busy) return;
@@ -332,7 +333,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     hand.getAnimations().forEach(a => a.cancel());
     hand.classList.remove('empty'); hand.classList.add('show');
     pill.className = 'pill wait'; pill.textContent = teams[turn].name + ' 던지는 중';
-    sub.textContent = '원하는 세기에서 손을 떼세요';
+    sub.textContent = '3초 안에 원하는 세기에서 손을 떼세요';
     tick();
   }
   function tick() {
@@ -340,7 +341,9 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     power = t <= 1 ? t : 2 - t;                                        // 올라갔다 내려옴
     fill.style.width = (power * 100).toFixed(1) + '%';
     fill.classList.toggle('hot', power >= DANGER);
-    pct.textContent = '세기 ' + Math.round(power * 100) + '%';
+    const left = Math.max(0, LIMIT - (performance.now() - startT));
+    pct.textContent = '세기 ' + Math.round(power * 100) + '% · ' + (left / 1000).toFixed(1) + '초';
+    if (left <= 0) { sub.textContent = '3초가 지나 자동으로 던졌습니다'; release(); return; }
     const shake = power >= DANGER ? (Math.random() - 0.5) * 6 : 0;
     hand.style.transform = `translateX(-50%) translateY(${power * 14}%) rotate(${power * 28 + shake}deg)`;
     raf = requestAnimationFrame(tick);
