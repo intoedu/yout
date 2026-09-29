@@ -27,8 +27,11 @@
 }
 html, body { height: 100%; }
 body {
-  background: radial-gradient(ellipse at 50% 35%, var(--blanket) 0%, var(--blanket-deep) 80%);
-  background-color: var(--blanket-deep);
+  --team-bg: var(--blanket-deep);
+  background-image: radial-gradient(ellipse at 50% 35%, rgba(255,255,255,.08) 0%, rgba(0,0,0,.45) 85%);
+  background-color: var(--team-bg);
+  background-attachment: fixed;
+  transition: background-color .6s ease;
   color: var(--fg);
   font-family: var(--body);
   padding-inline: 16px;
@@ -93,6 +96,16 @@ body {
 .stick.marked.flat .seal { display: grid; }
 .stick.out { filter: grayscale(.6) brightness(.75); }
 .stick { transition: opacity .15s; z-index: 2; }
+.timer {
+  position: absolute; left: 10%; top: 12%; width: 80%; height: 76%;
+  display: grid; place-items: center; z-index: 1; pointer-events: none;
+  font-family: var(--display); font-size: clamp(72px, 22vw, 140px); line-height: 1;
+  color: rgba(255,255,255,.9); text-shadow: 0 4px 18px rgba(0,0,0,.45);
+  font-variant-numeric: tabular-nums;
+}
+.timer.warn { color: #ff6b5f; }
+.timer[hidden] { display: none; }
+.timer small { font-size: .35em; margin-left: .08em; }
 .stick.hidden { opacity: 0; }
 
 /* 윷을 쥔 손 */
@@ -220,6 +233,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
 
   <div class="field" id="field">
     <div class="mat"></div>
+    <div class="timer" id="timer" hidden></div>
   </div>
 
   <div class="power">
@@ -258,6 +272,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   const fill = document.getElementById('fill');
   const pct = document.getElementById('pct');
   const turnEl = document.getElementById('turn');
+  const timerEl = document.getElementById('timer');
   const catchBtn = document.getElementById('catch');
   const teamList = document.getElementById('teamList');
 
@@ -342,7 +357,10 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     fill.style.width = (power * 100).toFixed(1) + '%';
     fill.classList.toggle('hot', power >= DANGER);
     const left = Math.max(0, LIMIT - (performance.now() - startT));
-    pct.textContent = '세기 ' + Math.round(power * 100) + '% · ' + (left / 1000).toFixed(1) + '초';
+    pct.textContent = '세기 ' + Math.round(power * 100) + '%';
+    timerEl.hidden = false;
+    timerEl.innerHTML = '<span>' + (left / 1000).toFixed(1) + '<small>초</small></span>';
+    timerEl.classList.toggle('warn', left < 1000);
     if (left <= 0) { sub.textContent = '3초가 지나 자동으로 던졌습니다'; release(); return; }
     const shake = power >= DANGER ? (Math.random() - 0.5) * 6 : 0;
     hand.style.transform = `translateX(-50%) translateY(${power * 14}%) rotate(${power * 28 + shake}deg)`;
@@ -351,6 +369,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   function release() {
     if (!charging) return;
     charging = false; cancelAnimationFrame(raf);
+    timerEl.hidden = true;
     btn.classList.remove('pressed');
     const p = Math.max(power, 0.08);
     busy = true;
@@ -467,6 +486,13 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
     const name = DEFAULT_NAMES[COLORS.indexOf(color)] || ('팀 ' + (i + 1));
     return { name, color, log: [] };
   }
+  // 팀 색을 어두운 담요색과 섞어 배경색으로 (글자가 잘 보이도록 어둡게)
+  function shade(hex, amt) {
+    const a = parseInt(hex.slice(1), 16), b = 0x0c1511;
+    const ch = (x, s) => (x >> s) & 255;
+    const m = s => Math.round(ch(a, s) * amt + ch(b, s) * (1 - amt));
+    return `rgb(${m(16)}, ${m(8)}, ${m(0)})`;
+  }
   const esc = t => t.replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
   function afterThrow(thrower, bonus) {
@@ -493,6 +519,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   function renderTeams() {
     const cur = teams[turn];
     turnEl.style.setProperty('--tc', cur.color);
+    document.body.style.setProperty('--team-bg', shade(cur.color, 0.42));
     const owed = (lastThrower === turn && !turnPassed && teams[turn].log.length) ? '<span class="bonus">한 번 더</span>' : '';
     turnEl.innerHTML = `<span class="dot"></span><span class="name">${esc(cur.name)}</span><span>차례</span>${owed}`;
     catchBtn.disabled = lastThrower === null;
