@@ -264,7 +264,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
 
   // ── 세기 게이지 ──
   let charging = false, busy = false, startT = 0, power = 0, raf = 0;
-  const CYCLE = 450;  // 0→100% 걸리는 시간(ms)
+  const CYCLE = 250;  // 0→100% 걸리는 시간(ms)
 
   function startCharge() {
     if (charging || busy) return;
