@@ -40,7 +40,21 @@ body {
   -webkit-touch-callout: none;
   overflow-x: hidden;
 }
+.layout {
+  width: 100%; max-width: 1160px;
+  display: grid; grid-template-columns: 1fr; gap: 8px 28px; align-items: start;
+}
+.side {
+  display: flex; flex-direction: column; gap: 12px;
+  padding-block: 20px 0; min-width: 0;
+  text-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+@media (min-width: 900px) {
+  .layout { grid-template-columns: 300px minmax(0, 620px); justify-content: center; }
+  .side { position: sticky; top: env(safe-area-inset-top, 0px); max-height: 100vh; overflow-y: auto; padding-bottom: 20px; }
+}
 .wrap {
+  min-width: 0; justify-self: center;
   text-shadow: 0 1px 3px rgba(0,0,0,.35);
   width: 100%; max-width: 620px;
   display: flex; flex-direction: column; align-items: center; gap: 16px;
@@ -68,7 +82,7 @@ body {
 @keyframes pop { 0% { transform: scale(.4); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
 
 /* 멍석과 윷가락 */
-.field { position: relative; width: 100%; aspect-ratio: 1.35; max-width: 100%; }
+.field { position: relative; width: min(100%, 520px); aspect-ratio: 1.35; max-width: 100%; }
 .mat {
   position: absolute; left: 10%; top: 12%; width: 80%; height: 76%;
   border-radius: 50%;
@@ -164,8 +178,8 @@ body {
 kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-width: 3px; border-radius: 6px; padding: 0 7px; color: var(--fg); }
 
 /* 위쪽 줄: 왼쪽 순위, 가운데 차례 */
-.topbar { width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
-.rank { position: relative; justify-self: start; }
+.topbar { width: 100%; display: flex; justify-content: center; }
+.rank { position: relative; align-self: flex-start; }
 .rank-btn {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
   background: rgba(0,0,0,.28); color: var(--fg); border: 1px solid rgba(255,255,255,.2);
@@ -232,7 +246,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
 .catch:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
 
 /* 팀 패널 */
-.teams { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.teams { width: 100%; display: flex; flex-direction: column; gap: 10px; }
 .teams-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
 .teams-head .btns { display: flex; gap: 8px; }
 .tbtn { background: none; border: 1px solid #3d6b52; color: var(--fg); border-radius: 8px; padding: 6px 12px; font-family: var(--body); font-size: 13px; cursor: pointer; }
@@ -268,14 +282,26 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
 </head>
 <body>
 
-<div class="wrap">
-  <div class="topbar">
-    <div class="rank">
-      <button type="button" class="rank-btn" id="rankBtn" aria-expanded="false"><span>순위</span><b id="rankSum">정하기</b></button>
-      <div class="rank-panel" id="rankPanel" hidden></div>
+<div class="layout">
+<aside class="side">
+  <div class="rank">
+    <button type="button" class="rank-btn" id="rankBtn" aria-expanded="false"><span>순위</span><b id="rankSum">정하기</b></button>
+    <div class="rank-panel" id="rankPanel" hidden></div>
+  </div>
+  <div class="teams">
+    <div class="teams-head">
+      <span>팀별 기록 · 팀 이름을 눌러 바꿀 수 있습니다</span>
+      <div class="btns">
+        <button type="button" class="tbtn" id="addTeam">+ 팀 추가</button>
+        <button type="button" class="tbtn" id="newGame">새 게임</button>
+      </div>
     </div>
+    <div id="teamList" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+</aside>
+<main class="wrap">
+  <div class="topbar">
     <div class="turn" id="turn"><span class="dot"></span><span class="name"></span><span>차례</span></div>
-    <span></span>
   </div>
   <div class="result" aria-live="polite">
     <div class="pill wait" id="pill">준비</div>
@@ -302,16 +328,7 @@ kbd { font-family: var(--body); border: 1px solid var(--muted); border-bottom-wi
   </div>
   <div class="hint"><kbd>Space</kbd> 길게 눌러 세기 조절 → 손을 떼면 던집니다 · 3초가 지나면 자동으로 던집니다<br>게이지 끝 빨간 구간에서 떼면 무조건 낙입니다 · 처음에 화면을 한 번 클릭해 주세요</div>
 
-  <div class="teams">
-    <div class="teams-head">
-      <span>팀별 기록 · 팀 이름을 눌러 바꿀 수 있습니다</span>
-      <div class="btns">
-        <button type="button" class="tbtn" id="addTeam">+ 팀 추가</button>
-        <button type="button" class="tbtn" id="newGame">새 게임</button>
-      </div>
-    </div>
-    <div id="teamList" style="display:flex;flex-direction:column;gap:10px"></div>
-  </div>
+</main>
 </div>
 
 <script>
